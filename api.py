@@ -1,33 +1,107 @@
-"""FastAPI Web Service for Art Analysis Assistant
-将多智能体艺术分析服务变成REST API
+"""飞书智能体后端服务 - 艺术鉴赏批评助手
 
-运行方式:
-    pip install -r requirements.txt fastapi uvicorn
-    python3 api.py
+支持功能：
+- 接收飞书消息回调
+- 调用AG2艺术分析Agent
+- 自动回复用户消息
 
-服务地址: http://localhost:8000
-API文档: http://localhost:8000/docs
+配置方式：
+1. 在飞书开放平台创建企业应用
+2. 获取 App ID、App Secret
+3. 配置服务器URL和回调地址
 """
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional
 import asyncio
 import os
+import json
+import hmac
+import hashlib
+import time
+import httpx
 from dotenv import load_dotenv
-
-from autogen.beta import Agent
-from autogen.beta.config import OpenAIConfig
 
 load_dotenv()
 
 app = FastAPI(
-    title="🎨 Art Analysis API",
-    description="多智能体艺术分析助手 - 飞书智能体后端服务",
+    title="🎨 Art Analysis Feishu Bot",
+    description="飞书智能体 - 艺术鉴赏批评助手",
     version="1.0.0"
 )
 
-# ============== 配置 ==============
+# ============== 飞书配置 ==============
+# 请在飞书开放平台获取并填入
+FEISHU_APP_ID = os.getenv("FEISHU_APP_ID", "")
+FEISHU_APP_SECRET = os.getenv("FEISHU_APP_SECRET", "")
+# 你的公网地址（通过内网穿透或云服务器暴露）
+FEISHU_CALLBACK_URL = os.getenv("FEISHU_CALLBACK_URL", "http://localhost:8000")
+
+# 缓存token
+_tenant_access_token = None
+_token_expires_at = 0
+
+async def get_tenant_access_token():
+    """获取飞书tenant_access_token"""
+    global _tenant_access_token, _token_expires_at
+    
+    # 检查缓存的token是否有效
+    if _tenant_access_token and time.time() < _token_expires_at:
+        return _tenant_access_token
+    
+    if not FEISHU_APP_ID or not FEISHU_APP_SECRET:
+        raise HTTPException(status_code=500, detail="请配置FEISHU_APP_ID和FEISHU_APP_SECRET")
+    
+    url = "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal"
+    data = {
+        "app_id": FEISHU_APP_ID,
+        "app_secret": FEISHU_APP_SECRET
+    }
+    
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(url, json=data)
+        result = resp.json()
+        
+        if result.get("code") != 0:
+            raise HTTPException(status_code=500, detail=f"获取token失败: {result}")
+        
+        _tenant_access_token = result["tenant_access_token"]
+        _token_expires_at = time.time() + result.get("expire", 7200) - 300
+        return _tenant_access_token
+
+
+async def send_feishu_message(receive_id: str, message_type: str = "text", content: str = ""):
+    """发送飞书消息"""
+    token = await get_tenant_access_token()
+    
+    url = "https://open.feishu.cn/open-apis/im/v1/messages"
+    params = {"receive_id_type": "open_id"}
+    
+    # 构建消息内容
+    if message_type == "text":
+        msg_content = json.dumps({"text": content})
+    else:
+        msg_content = json.dumps({"text": content})
+    
+    data = {
+        "receive_id": receive_id,
+        "msg_type": message_type,
+        "content": msg_content
+    }
+    
+    headers = {"Authorization": f"Bearer {token}"}
+    
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(url, params=params, json=data, headers=headers)
+        result = resp.json()
+        return result
+
+
+# ============== AG2 Agent 配置 ==============
+from autogen.beta import Agent
+from autogen.beta.config import OpenAIConfig
+
 API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 BASE_URL = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
 MODEL = os.getenv("AG2_DEFAULT_MODEL", "google/gemini-2.5-flash")
@@ -40,13 +114,11 @@ config = OpenAIConfig(
     max_tokens=4096,
 )
 
-# ============== Agent 初始化 ==============
 analyst = None
-critic = None
 
 async def init_agents():
-    """初始化 Agent"""
-    global analyst, critic
+    """初始化Agent"""
+    global analyst
     
     analyst = Agent(
         "art_analyst",
@@ -57,167 +129,127 @@ async def init_agents():
             "- 艺术技法和风格时期\n"
             "- 象征意义和艺术意图\n"
             "- 历史和文化背景\n"
-            "提供详细、具有教育意义的简体中文回复。"
+            "提供详细、具有教育意义的简体中文回复。保持友善专业的语气。"
         ),
         config=config,
     )
-    
-    critic = Agent(
-        "art_critic",
-        prompt=(
-            "你是一位艺术评论家，精通艺术史和艺术理论。"
-            "你的职责是审查艺术分析并提供建设性批评：\n"
-            "- 识别分析中的空白或遗漏信息\n"
-            "- 建议额外的分析角度\n"
-            "- 确保艺术史论断的准确性\n"
-            "回复要详尽但简洁，使用简体中文。"
-        ),
-        config=config,
-    )
-    
-    # 将 CRITIC 作为工具暴露给 ANALYST
-    consult_critic = critic.as_tool(
-        name="consult_critic",
-        description="发送分析给艺术评论家审查并获取反馈",
-    )
-    
-    if hasattr(analyst.tools, 'append'):
-        analyst.tools.append(consult_critic)
 
-# ============== 请求模型 ==============
-class AnalyzeRequest(BaseModel):
-    """艺术分析请求"""
-    artwork: str  # 艺术作品描述/名称/图片URL
-    user_id: Optional[str] = None  # 可选：用户ID
-    language: Optional[str] = "zh"  # 语言：zh/en
 
-class HealthResponse(BaseModel):
-    """健康检查响应"""
-    status: str
-    model: str
-    agent_initialized: bool
+async def analyze_artwork(artwork_desc: str) -> str:
+    """分析艺术作品"""
+    if not analyst:
+        await init_agents()
+    
+    prompt = f"请详细分析这件艺术作品：\n{artwork_desc}\n\n请提供至少5个关键见解，包括构图、技法和意义。用优雅的Markdown格式回复。"
+    
+    reply = await analyst.ask(prompt)
+    return reply.body
 
-# ============== API 端点 ==============
+
+# ============== API端点 ==============
 
 @app.on_event("startup")
-async def startup_event():
-    """服务启动时初始化 Agent"""
+async def startup():
     await init_agents()
 
-@app.get("/", tags=["Root"])
+@app.get("/")
 async def root():
-    """根路径"""
-    return {
-        "name": "Art Analysis API",
-        "version": "1.0.0",
-        "description": "多智能体艺术分析助手",
-        "docs": "/docs"
-    }
+    return {"name": "Art Analysis Feishu Bot", "version": "1.0.0"}
 
-@app.get("/health", response_model=HealthResponse, tags=["Health"])
-async def health_check():
-    """健康检查"""
-    return HealthResponse(
-        status="ok",
-        model=MODEL,
-        agent_initialized=True
-    )
+@app.get("/health")
+async def health():
+    return {"status": "ok", "feishu_configured": bool(FEISHU_APP_ID and FEISHU_APP_SECRET)}
 
-@app.post("/analyze", tags=["Analysis"])
-async def analyze_artwork(request: AnalyzeRequest):
-    """
-    分析艺术作品
+@app.post("/analyze")
+async def analyze(request: dict):
+    """直接分析接口（供测试用）"""
+    artwork = request.get("artwork", "")
+    if not artwork:
+        raise HTTPException(status_code=400, detail="请提供artwork参数")
     
-    请求体:
-    ```json
-    {
-        "artwork": "《蒙娜丽莎》by Leonardo da Vinci",
-        "user_id": "optional_user_id",
-        "language": "zh"
-    }
-    ```
-    
-    返回:
-    ```json
-    {
-        "success": true,
-        "result": "艺术分析内容...",
-        "artwork": "输入的艺术作品描述"
-    }
-    ```
-    """
-    if not ANALYST:
-        raise HTTPException(status_code=503, detail="Agent未初始化，请稍后重试")
-    
-    if not request.artwork.strip():
-        raise HTTPException(status_code=400, detail="请提供艺术作品描述")
-    
-    try:
-        prompt = f"请详细分析这件艺术作品：\n{request.artwork}\n\n请提供至少5个关键见解，包括构图、技法和意义。"
-        
-        # 调用 Agent 分析
-        reply = await analyst.ask(prompt)
-        
-        return {
-            "success": True,
-            "result": reply.body,
-            "artwork": request.artwork
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"分析失败: {str(e)}")
+    result = await analyze_artwork(artwork)
+    return {"success": True, "result": result}
 
-# ============== 飞书机器人 Webhook 端点 ==============
+# ============== 飞书回调接口 ==============
 
-@app.post("/feishu/webhook", tags=["Feishu"])
-async def feishu_webhook(request: dict):
+@app.post("/feishu/callback")
+async def feishu_callback(request: Request):
     """
-    飞书机器人 Webhook 端点
+    飞书消息回调接口
     
-    飞书机器人发送消息时会POST到该端点
-    需要在飞书后台配置 Webhook URL
+    飞书会POST消息到该接口进行处理
+    需要在飞书开放平台配置该回调URL
     """
-    try:
-        # 解析飞书消息
-        event = request.get("event", {})
-        message = event.get("message", {})
-        message_type = message.get("message_type", "")
+    body = await request.json()
+    
+    # 1. 验证URL（飞书首次配置时发送）
+    if body.get("type") == "url_verification":
+        return {"challenge": body.get("challenge")}
+    
+    # 2. 事件回调
+    if body.get("type") == "event_callback":
+        event = body.get("event", {})
         
-        # 文本消息
-        if message_type == "text":
-            text_content = message.get("text", {}).get("content", "").strip()
+        # 只处理消息事件
+        if event.get("msg_type") == "text":
+            message = event.get("message", {})
             
-            if not text_content:
+            # 获取发送者open_id和消息内容
+            sender_open_id = message.get("sender_id", {}).get("open_id", "")
+            user_text = message.get("text", "").strip()
+            message_id = message.get("message_id", "")
+            
+            if not user_text:
                 return {"success": True}
             
-            # 调用分析服务
-            reply = await analyst.ask(
-                f"请详细分析这件艺术作品：\n{text_content}\n\n请提供至少5个关键见解。"
-            )
+            # 过滤掉@机器人的前缀（飞书消息格式）
+            # 飞书@消息格式: <at id=all></at> 内容
+            if "<at" in user_text:
+                # 去掉@标签
+                import re
+                user_text = re.sub(r'<at[^>]*></at>', '', user_text).strip()
             
-            # 返回响应（需要飞书应用支持被动回复消息）
-            return {
-                "success": True,
-                "msg_type": "text",
-                "content": {"text": reply.body}
-            }
-        
-        return {"success": True, "message": "仅支持文本消息"}
-        
-    except Exception as e:
-        return {"success": False, "error": str(e)}
+            print(f"收到消息 from {sender_open_id}: {user_text[:50]}...")
+            
+            # 调用AI分析
+            try:
+                analysis_result = await analyze_artwork(user_text)
+                
+                # 回复用户
+                await send_feishu_message(
+                    receive_id=sender_open_id,
+                    message_type="text",
+                    content=analysis_result
+                )
+                print(f"已回复消息给 {sender_open_id}")
+                
+            except Exception as e:
+                print(f"处理消息失败: {e}")
+                await send_feishu_message(
+                    receive_id=sender_open_id,
+                    message_type="text",
+                    content=f"抱歉，分析过程中遇到错误，请稍后再试。\n\n错误信息：{str(e)}"
+                )
+    
+    return {"success": True}
 
-# 保持全局变量引用
-ANALYST = None
 
-# 启动时初始化
-import atexit
-@atexit.register
-def cleanup():
-    pass
+# ============== 配置检查 ==============
+
+@app.get("/feishu/config")
+async def check_config():
+    """检查飞书配置状态"""
+    return {
+        "app_id_configured": bool(FEISHU_APP_ID),
+        "app_secret_configured": bool(FEISHU_APP_SECRET),
+        "callback_url": FEISHU_CALLBACK_URL,
+        "full_callback_url": f"{FEISHU_CALLBACK_URL}/feishu/callback"
+    }
+
 
 if __name__ == "__main__":
     import uvicorn
-    print("🎨 Art Analysis API 服务启动中...")
+    print("🎨 飞书智能体服务启动中...")
+    print(f"📋 飞书回调地址: {FEISHU_CALLBACK_URL}/feishu/callback")
     print("📖 API文档: http://localhost:8000/docs")
     uvicorn.run(app, host="0.0.0.0", port=8000)
