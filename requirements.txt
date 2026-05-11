@@ -1,4 +1,4 @@
-# Streamlit App
 streamlit>=1.36
 python-dotenv>=1.0
 openai>=1.0
+gunicorn>=21.0
