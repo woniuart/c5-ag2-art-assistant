@@ -11,7 +11,8 @@
 3. 配置服务器URL和回调地址
 """
 from fastapi import FastAPI, HTTPException, Header, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional
 import asyncio
@@ -30,6 +31,11 @@ app = FastAPI(
     description="飞书智能体 - 艺术鉴赏批评助手",
     version="1.0.0"
 )
+
+# Mount static files
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+if os.path.exists(static_dir):
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 # ============== 飞书配置 ==============
 # 请在飞书开放平台获取并填入
@@ -154,7 +160,11 @@ async def startup():
 
 @app.get("/")
 async def root():
-    return {"name": "Art Analysis Feishu Bot", "version": "1.0.0"}
+    """返回HTML界面"""
+    index_path = os.path.join(os.path.dirname(__file__), "static", "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return {"name": "Art Analysis Bot", "version": "1.0.0"}
 
 @app.get("/health")
 async def health():
@@ -168,6 +178,15 @@ async def analyze(request: dict):
         raise HTTPException(status_code=400, detail="请提供artwork参数")
     
     result = await analyze_artwork(artwork)
+    return {"success": True, "result": result}
+
+@app.get("/analyze")
+async def analyze_get(q: str = ""):
+    """GET方式分析接口（用于公网访问）"""
+    if not q:
+        raise HTTPException(status_code=400, detail="请提供?q=作品名称参数")
+    
+    result = await analyze_artwork(q)
     return {"success": True, "result": result}
 
 # ============== 飞书回调接口 ==============
