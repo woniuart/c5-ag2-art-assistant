@@ -29,13 +29,9 @@
             border-radius: 15px;
             padding: 20px;
             margin-bottom: 20px;
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
         }
         input[type="text"] {
-            flex: 1;
-            min-width: 200px;
+            width: 70%;
             padding: 15px;
             font-size: 16px;
             border: none;
@@ -51,12 +47,11 @@
             color: #fff;
             cursor: pointer;
         }
-        button:hover { opacity: 0.9; }
         .result-box {
-            background: rgba(255,255,255,0.05);
+            background: rgba(255,255,255,0.1);
             border-radius: 15px;
             padding: 20px;
-            min-height: 300px;
+            min-height: 100px;
             white-space: pre-wrap;
             line-height: 1.8;
             font-size: 15px;
@@ -64,15 +59,6 @@
             max-height: 600px;
         }
         .loading { color: #feca57; text-align: center; padding: 50px; }
-        .error { color: #ff6b6b; }
-        .link-box {
-            background: rgba(0,255,0,0.1);
-            padding: 15px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            text-align: center;
-        }
-        .link-box a { color: #48dbfb; font-size: 1.2em; }
     </style>
 </head>
 <body>
@@ -80,86 +66,40 @@
         <h1>🎨 艺术分析助手</h1>
         <p class="subtitle">基于 AG2 多智能体框架</p>
         
-        <div class="link-box">
-            如果页面无法响应请点击 → <a id="altLink" href="#">使用备用链接</a>
-        </div>
-        
+        <!-- 这个表单会自动提交到根路径 -->
         <div class="input-box">
-            <input type="text" id="artwork" placeholder="输入艺术作品名称，如：蒙娜丽莎、星空、向日葵" 
-                   onkeypress="if(event.key==='Enter')analyze()">
-            <button onclick="analyze()">开始分析</button>
+            <form method="GET" action="/" id="analysisForm" style="display:flex;gap:10px;flex-wrap:wrap;">
+                <input type="text" name="q" id="artworkInput" placeholder="输入艺术作品名称，如：蒙娜丽莎、星空" value="">
+                <button type="submit" id="submitBtn">开始分析</button>
+            </form>
         </div>
         
         <div class="result-box" id="result">
-            <p style="color:#888;text-align:center;margin-top:100px;">
-                🎨 输入艺术作品名称，点击"开始分析"<br><br>
-                建议作品：蒙娜丽莎、星空、向日葵、最后的晚餐、记忆的永恒、格尔尼卡
+            <p style="color:#888;text-align:center;margin-top:20px;">
+                输入作品名称，点击"开始分析"<br><br>
+                建议：蒙娜丽莎、星空、向日葵
             </p>
         </div>
     </div>
 
     <script>
-        // 动态获取当前服务器地址
-        const API_BASE = window.location.origin;
-        document.getElementById('altLink').href = API_BASE + '/ai?artwork=蒙娜丽莎';
+        // 自动检测URL参数并处理
+        const urlParams = new URLSearchParams(window.location.search);
+        const query = urlParams.get('q');
         
-        let loading = false;
-        
-        function analyze() {
-            const input = document.getElementById('artwork').value.trim();
-            const resultDiv = document.getElementById('result');
+        // 如果有查询参数，显示loading
+        if (query) {
+            document.getElementById('artworkInput').value = query;
+            document.getElementById('submitBtn').disabled = true;
+            document.getElementById('result').innerHTML = '<p class="loading">🎨 正在分析: ' + query + '</p>';
             
-            if (!input) {
-                resultDiv.innerHTML = '<p class="error">请输入艺术作品名称</p>';
-                return;
-            }
-            
-            if (loading) return;
-            loading = true;
-            
-            resultDiv.innerHTML = '<p class="loading">🎨 AI正在分析中，请稍候...</p>';
-            
-            // 使用 iframe 下载方式获取结果
-            const iframe = document.createElement('iframe');
-            iframe.style.display = 'none';
-            iframe.name = 'downloadFrame';
-            
-            // 创建表单
-            const form = document.createElement('form');
-            form.method = 'POST';
-            form.action = API_BASE + '/api/analyze';
-            form.target = 'downloadFrame';
-            
-            const inputEl = document.createElement('input');
-            inputEl.type = 'hidden';
-            inputEl.name = 'artwork';
-            inputEl.value = input;
-            
-            form.appendChild(inputEl);
-            
-            // 使用fetch轮询结果
-            fetch(API_BASE + '/api/analyze?q=' + encodeURIComponent(input), {
-                method: 'GET',
-                mode: 'cors'
-            })
-            .then(r => r.json())
-            .then(data => {
-                loading = false;
-                if (data.success) {
-                    resultDiv.innerHTML = data.result;
-                } else {
-                    resultDiv.innerHTML = '<p class="error">分析失败: ' + (data.error || '未知错误') + '</p>';
-                }
-            })
-            .catch(err => {
-                loading = false;
-                // 如果fetch失败，使用表单提交作为后备
-                console.log('Fetch failed, using form submit:', err);
-                resultDiv.innerHTML = '<p class="loading">正在跳转分析...</p>';
-                document.body.appendChild(iframe);
-                document.body.appendChild(form);
-                form.submit();
-            });
+            // 设置一个定时器轮询结果
+            // 由于服务器会处理分析，这里我们暂时等待
+            // 使用meta refresh来触发服务端渲染的页面
+            setTimeout(function() {
+                // 重新加载当前页面，让服务端处理分析
+                window.location.reload();
+            }, 2000);
         }
     </script>
 </body>

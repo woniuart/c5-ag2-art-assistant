@@ -158,10 +158,67 @@ async def analyze_artwork(artwork_desc: str) -> str:
 async def startup():
     await init_agents()
 
-@app.get("/")
-async def root():
-    """返回HTML界面"""
+@app.get("/s/{encoded_q}")
+async def root_short(encoded_q: str):
+    """短链接格式 - 用户名用base64编码"""
+    import base64
+    try:
+        # 解码
+        q = base64.b64decode(encoded_q).decode('utf-8')
+    except:
+        return HTMLResponse(content="<h1>无效的链接</h1>", status_code=400)
+    
+    # 继续正常的分析流程
     index_path = os.path.join(os.path.dirname(__file__), "static", "index.html")
+    if os.path.exists(index_path):
+        try:
+            result = await analyze_artwork(q)
+            with open(index_path, 'r', encoding='utf-8') as f:
+                html = f.read()
+            old_str = '<p style="color:#888;text-align:center;margin-top:20px;">'
+            new_str = f'<div class="result-box" style="background:rgba(255,255,255,0.1);">{result}</div>{old_str}'
+            html = html.replace(old_str, new_str)
+            html = html.replace('value="">', f'value="{q}">')
+            return HTMLResponse(content=html)
+        except Exception as e:
+            return HTMLResponse(content=f"<h1>分析出错: {str(e)}</h1><a href='/'>返回</a>")
+    return {"error": "index not found"}
+
+@app.get("/")
+async def root(q: str = ""):
+    """返回HTML界面，支持?q=参数直接分析"""
+    index_path = os.path.join(os.path.dirname(__file__), "static", "index.html")
+    
+    if q and os.path.exists(index_path):
+        # 如果有查询参数，先分析，然后返回带结果的HTML
+        try:
+            print(f"开始分析: {q}")
+            result = await analyze_artwork(q)
+            print(f"分析完成，结果长度: {len(result)}")
+            
+            # 读取HTML并替换内容
+            with open(index_path, 'r', encoding='utf-8') as f:
+                html = f.read()
+            
+            print(f"HTML长度: {len(html)}")
+            
+            # 替换结果区域 - 注意HTML中的实际值
+            old_str = '<p style="color:#888;text-align:center;margin-top:20px;">'
+            new_str = f'<div class="result-box" style="background:rgba(255,255,255,0.1);">{result}</div>{old_str}'
+            html = html.replace(old_str, new_str)
+            
+            # 添加选中的值到输入框
+            html = html.replace('value="">', f'value="{q}">')
+            
+            print(f"替换后HTML长度: {len(html)}")
+            
+            return HTMLResponse(content=html)
+        except Exception as e:
+            import traceback
+            err = traceback.format_exc()
+            print(f"分析出错: {err}")
+            return HTMLResponse(content=f"<h1>分析出错: {str(e)}</h1><a href='/'>返回</a>")
+    
     if os.path.exists(index_path):
         return FileResponse(index_path)
     return {"name": "Art Analysis Bot", "version": "1.0.0"}
@@ -180,13 +237,10 @@ async def analyze(request: dict):
     result = await analyze_artwork(artwork)
     return {"success": True, "result": result}
 
-@app.get("/analyze")
-async def analyze_get(q: str = ""):
+@app.get("/analyze/{artwork}")
+async def analyze_get(artwork: str):
     """GET方式分析接口（用于公网访问）"""
-    if not q:
-        raise HTTPException(status_code=400, detail="请提供?q=作品名称参数")
-    
-    result = await analyze_artwork(q)
+    result = await analyze_artwork(artwork)
     return {"success": True, "result": result}
 
 # ============== 飞书回调接口 ==============
