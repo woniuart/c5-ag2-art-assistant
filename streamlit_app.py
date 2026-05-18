@@ -33,7 +33,7 @@ BASE_URL = os.getenv("OPENROUTER_BASE_URL", "https://api.siliconflow.cn/v1")
 TEXT_MODEL = os.getenv("AG2_DEFAULT_MODEL", "Qwen/Qwen2.5-7B-Instruct")
 
 # 视觉模型（用于图片分析）- 必须是支持图像的VLM
-VISION_MODEL = os.getenv("VISION_MODEL", "Qwen/Qwen2-VL-7B-Instruct")
+VISION_MODEL = os.getenv("VISION_MODEL", "Qwen/Qwen3-VL-8B-Instruct")
 
 # 如果视觉模型配置错误，给出提示
 if VISION_MODEL == TEXT_MODEL:
