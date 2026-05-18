@@ -1,14 +1,14 @@
 # ArtGuide AG2 - 艺术鉴赏多智能体教学助手
 # 依赖包
 
+# Web 框架
+streamlit>=1.30.0
+Pillow>=10.0.0
+colorthief>=0.2.0
+
 # AG2 (AutoGen Beta)
 pyautogen>=0.2.0
 
-# 环境变量管理
-python-dotenv>=1.0.0
-
-# Streamlit (Web UI)
-streamlit>=1.30.0
-
-# OpenAI 兼容客户端
+# AI API 客户端（OpenAI 兼容）
 openai>=1.0.0
+python-dotenv>=1.0.0
