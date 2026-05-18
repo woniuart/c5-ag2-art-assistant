@@ -37,7 +37,7 @@ VISION_MODEL = os.getenv("VISION_MODEL", "Qwen/Qwen3-VL-8B-Instruct")
 
 # 如果视觉模型配置错误，给出提示
 if VISION_MODEL == TEXT_MODEL:
-    st.warning("⚠️ 视觉模型和文本模型相同，请确保 VISION_MODEL 设置为支持图像的模型（如 Qwen/Qwen2-VL-7B-Instruct）")
+    st.warning("⚠️ 视觉模型和文本模型相同，请确保 VISION_MODEL 设置为支持图像的模型（如 Qwen/Qwen3-VL-8B-Instruct）")
 
 # 标题
 st.markdown("""
@@ -212,8 +212,8 @@ with tab2:
                 except Exception as e:
                     st.error(f"❌ 分析出错: {str(e)}")
                     # 如果是模型不支持视觉，提示用户
-                    if "vision" in str(e).lower() or "image" in str(e).lower():
-                        st.info("💡 当前模型可能不支持图片分析，请尝试使用支持视觉的模型（如 Qwen-VL）")
+                    if "vision" in str(e).lower() or "image" in str(e).lower() or "VLM" in str(e).lower():
+                        st.info("💡 当前模型可能不支持图片分析，请确保在 Render Dashboard 中设置了 VISION_MODEL=Qwen/Qwen3-VL-8B-Instruct")
 
 # 版权信息
 st.markdown("---")
