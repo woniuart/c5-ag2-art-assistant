@@ -1,132 +1,43 @@
-# ArtGuide - 艺术鉴赏AI助手 🎨
+# 🎨 Art Analysis Assistant | 艺术分析助手
 
-> 基于AG2 (AutoGen) Beta框架的多智能体艺术教学系统
+[![AG2 Beta](https://img.shields.io/badge/Framework-AG2%20Beta-blue)](https://docs.ag2.ai/)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-green)](https://www.python.org/)
 
-## 一句话定位
+基于 AG2 (AutoGen) 框架的多智能体艺术分析系统
 
-输入任意艺术作品名称，输出专业的艺术分析与教学建议。
+## 🚀 一键部署
 
-## 赛道 Track
+### 方式1: Render (推荐，免费)
+点击链接部署：
+https://render.com/deploy?repo=https://github.com/woniuart/c5-ag2-art-assistant
 
-- [x] **multi-agent** - AG2多智能体协作
+部署后在Settings中添加环境变量：
+- `OPENROUTER_API_KEY` = `sk-mdoklwrqimsbvjnruqrsdxmzoaycpekndmyvqgyymfqwooqa`
+- `OPENROUTER_BASE_URL` = `https://api.siliconflow.cn/v1`
+- `AG2_DEFAULT_MODEL` = `MiniMaxAI/MiniMax-M2.5`
 
-## 核心特性
-
-### 🤖 双Agent协作架构
-
-```
-用户问题 → Coordinator → ArtAnalyst (分析) → TeachingAssistant (教学转化) → 用户
-```
-
-- **ArtAnalyst**: 专业艺术分析师 - 分析构图、色彩、艺术史背景
-- **TeachingAssistant**: 教学专家 - 将专业分析转化为教学友好的内容
-
-### ✨ 功能特点
-
-- 专业的艺术作品分析
-- 艺术史背景解读
-- 教学友好的内容输出
-- 课堂讨论问题设计
-- 扩展学习资源推荐
-
-## 5分钟快速开始
-
-### 1. 克隆与安装
-
+### 方式2: 本地运行
 ```bash
-git clone https://github.com/your-username/ArtGuide_AG2.git
-cd ArtGuide_AG2
 pip install -r requirements.txt
+streamlit run streamlit_app.py
 ```
 
-### 2. 配置API密钥
+## 💡 使用方法
 
-```bash
-# 复制环境变量示例
-cp .env.example .env
+1. 在输入框中输入艺术作品名称（如：蒙娜丽莎、星空）
+2. 点击"开始分析"
+3. AI会自动分析作品并返回详细的艺术分析报告
 
-# 编辑 .env 填入你的API密钥
-# Windows: notepad .env
-# Linux/Mac: nano .env
-```
+## 📁 项目结构
 
-支持以下API:
-- **OpenAI**: 设置 `OPENAI_API_KEY`
-- **OpenRouter**: 设置 `OPENROUTER_API_KEY` 和 `OPENAI_BASE_URL`
+- `streamlit_app.py` - Streamlit Web界面版本
+- `api.py` - FastAPI后端版本
+- `main.py` - 终端版本
+- `requirements.txt` - Python依赖
 
-### 3. 运行
+## ⚠️ 注意
 
-```bash
-# 分析指定作品
-python app.py "蒙娜丽莎"
+本项目使用SiliconFlow的免费API，有速率限制。如需大规模使用，请配置自己的API Key。
 
-# 或者不传参数，默认分析蒙娜丽莎
-python app.py
-```
-
-## 项目结构
-
-```
-ArtGuide_AG2/
-├── app.py              # 主程序 - 双Agent协作
-├── requirements.txt    # Python依赖
-├── .env.example        # 环境变量示例
-├── README.md           # 本文件
-├── AI_LOG.md           # AI开发日志
-├── ATTRIBUTION.md      # 引用说明
-└── LICENSE             # MIT许可证
-```
-
-## 使用示例
-
-```bash
-$ python app.py "星夜"
-
-🎨 ArtGuide - 艺术鉴赏AI助手
-==================================================
-
-📚 正在分析作品: 星夜
---------------------------------------------------
-
-==================================================
-📖 分析结果:
-==================================================
-【星夜】是梵高于1889年创作的一幅著名油画...
-
-[详细分析内容...]
-```
-
-## 技术细节
-
-### AG2 Beta 版本
-
-- **框架**: pyautogen >= 0.2.0
-- **Python**: 3.10+
-- **API**: OpenAI / OpenRouter 兼容
-
-### Agent设计
-
-本项目展示了两种AG2多Agent协作模式：
-
-1. **Agent-as-Tool**: 
-   - 使用 `Agent.as_tool()` 将子Agent作为工具暴露给协调者
-   - 协调者可以按需调用专业Agent
-
-2. **Sub-task Delegation**:
-   - 复杂任务分解给不同专业Agent
-   - 每个Agent专注自己的领域
-
-## 评分信息
-
-| 评分维度 | 分数 |
-|---------|------|
-| Innovation & creativity | 4 |
-| Technical execution | 5 |
-| Impact & usefulness | 5 |
-| Use of AG2 / multi-agent design | 5 |
-| Presentation & demo | 4 |
-| **TOTAL** | **23/25** |
-
-## 许可证 MIT
-
-See [LICENSE](LICENSE) file.
+---
+**Built with ❤️ using AG2 Beta & Streamlit**
