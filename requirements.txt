@@ -7,9 +7,8 @@ pyautogen>=0.2.0
 # 环境变量管理
 python-dotenv>=1.0.0
 
-# Web 框架（Render 部署必需）
-flask>=3.0.0
-gunicorn>=21.2.0
+# Streamlit (Web UI)
+streamlit>=1.30.0
 
-# 异步支持 (Python 3.11+ 内置)
-# asyncio
+# OpenAI 兼容客户端
+openai>=1.0.0

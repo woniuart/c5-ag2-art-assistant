@@ -4,9 +4,13 @@ services:
     env: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn web_app:app
+    startCommand: streamlit run streamlit_app.py --server.port $PORT --server.address 0.0.0.0 --server.headless true
     envVars:
       - key: PYTHON_VERSION
-        value: 3.11.0
-    healthCheckPath: /health
-    autoDeploy: true
+        value: "3.11.0"
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPENROUTER_BASE_URL
+        value: https://api.siliconflow.cn/v1
+      - key: AG2_DEFAULT_MODEL
+        value: MiniMaxAI/MiniMax-M2.5
