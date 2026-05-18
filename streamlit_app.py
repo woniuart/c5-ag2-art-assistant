@@ -2,10 +2,9 @@ import streamlit as st
 import os
 import base64
 import io
-import json
 from dotenv import load_dotenv
 from PIL import Image
-import colorthon
+import colorthief
 
 # 加载.env文件
 load_dotenv()
@@ -15,9 +14,6 @@ API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 BASE_URL = os.getenv("OPENROUTER_BASE_URL", "https://api.siliconflow.cn/v1")
 MODEL = os.getenv("AG2_DEFAULT_MODEL", "MiniMaxAI/MiniMax-M2.5")
 VISION_MODEL = os.getenv("VISION_MODEL", "Qwen/Qwen2-VL-7B-Instruct")
-# 如果用 OpenRouter 做视觉分析（更稳定），可设置：
-# VISION_MODEL = "google/gemini-2.0-flash-001"
-# VISION_BASE_URL = "https://openrouter.ai/api/v1"
 
 # ========== Page config ==========
 st.set_page_config(
@@ -58,20 +54,6 @@ if not API_KEY:
     st.info("当前使用 SiliconFlow API，请在 .env 中填写你的 API Key")
     st.stop()
 
-# ========== 侧边栏：模式选择 ==========
-with st.sidebar:
-    st.header("⚙️ 设置")
-    analysis_mode = st.radio(
-        "分析模式",
-        ["📝 文字输入分析", "📷 上传图片识图", "🎨 图片色彩分析"],
-        index=0
-    )
-    st.markdown("---")
-    st.markdown("**当前模型**")
-    st.code(MODEL)
-    st.markdown("**视觉模型**")
-    st.code(VISION_MODEL)
-
 # ========== 辅助函数 ==========
 def image_to_base64(image: Image.Image, max_size: int = 512) -> str:
     """将 PIL 图片转为 base64 字符串（压缩到合适大小）"""
@@ -85,7 +67,6 @@ def image_to_base64(image: Image.Image, max_size: int = 512) -> str:
 def extract_colors(image: Image.Image, num_colors: int = 6):
     """提取图片主色调"""
     try:
-        import colorthief
         ct = colorthief.ColorThief(image)
         palette = ct.get_palette(color_count=num_colors)
         dominant = ct.get_color(quality=1)
@@ -95,18 +76,11 @@ def extract_colors(image: Image.Image, num_colors: int = 6):
         img = image.copy()
         img.thumbnail((100, 100))
         pixels = list(img.getdata())
-        # 简单统计出现最多的颜色
         from collections import Counter
         counter = Counter(pixels)
         palette = [c for c, _ in counter.most_common(num_colors)]
         dominant = palette[0] if palette else (0, 0, 0)
         return palette, dominant
-
-
-def hex_to_rgb(hex_color: str):
-    """hex 转 rgb"""
-    h = hex_color.lstrip("#")
-    return tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
 
 
 def rgb_to_hex(rgb):
@@ -123,7 +97,7 @@ def analyze_image_with_vision(image_b64: str, prompt: str) -> str:
     try:
         from openai import OpenAI
         client = OpenAI(api_key=API_KEY, base_url=BASE_URL)
-
+        
         messages = [
             {"role": "system", "content": "你是一位专业的艺术史学者和视觉艺术分析师，擅长从图像中分析艺术作品。请用简体中文详细回复，格式清晰，适合教学使用。"},
             {"role": "user", "content": [
@@ -131,7 +105,7 @@ def analyze_image_with_vision(image_b64: str, prompt: str) -> str:
                 {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"}}
             ]}
         ]
-
+        
         response = client.chat.completions.create(
             model=VISION_MODEL,
             messages=messages,
@@ -148,7 +122,7 @@ def analyze_text(artwork: str) -> str:
     try:
         from openai import OpenAI
         client = OpenAI(api_key=API_KEY, base_url=BASE_URL)
-
+        
         response = client.chat.completions.create(
             model=MODEL,
             messages=[
@@ -172,10 +146,22 @@ def analyze_text(artwork: str) -> str:
         return f"分析出错: {str(e)}"
 
 
-# ========== 主界面 ==========
+# ========== 主界面：统一输入 ==========
 
-if analysis_mode == "📝 文字输入分析":
-    st.markdown("## 📝 文字输入分析")
+st.markdown("## 📝 艺术分析")
+
+# 输入方式选择
+input_mode = st.radio(
+    "选择输入方式",
+    ["📝 输入作品名称", "📷 上传图片分析", "📝+📷 同时提供名称和图片"],
+    index=0,
+    horizontal=True
+)
+
+st.markdown("---")
+
+# 根据选择的方式显示输入界面
+if input_mode == "📝 输入作品名称":
     col1, col2 = st.columns([3, 1])
     with col1:
         artwork = st.text_input(
@@ -186,7 +172,7 @@ if analysis_mode == "📝 文字输入分析":
         )
     with col2:
         analyze_btn = st.button("🎨 开始分析", use_container_width=True, key="text_btn")
-
+    
     # 示例按钮
     st.markdown("💡 **快速示例：**")
     examples = ["蒙娜丽莎", "星空", "向日葵", "格尔尼卡", "千里江山图"]
@@ -195,7 +181,7 @@ if analysis_mode == "📝 文字输入分析":
         if cols[i].button(ex, key=f"ex_{i}"):
             artwork = ex
             analyze_btn = True
-
+    
     if analyze_btn and artwork:
         with st.spinner(f"🎨 AI 正在分析《{artwork}》，请稍候..."):
             result = analyze_text(artwork)
@@ -204,30 +190,29 @@ if analysis_mode == "📝 文字输入分析":
         st.markdown("---")
         st.success("✅ 分析完成！")
 
-elif analysis_mode == "📷 上传图片识图":
-    st.markdown("## 📷 上传图片识图")
+elif input_mode == "📷 上传图片分析":
     st.markdown("上传艺术作品的图片，AI 将自动识别并分析该作品。")
-
+    
     uploaded_file = st.file_uploader(
         "选择一张艺术作品图片",
         type=["jpg", "jpeg", "png", "webp"],
         key="vision_uploader"
     )
-
+    
     if uploaded_file is not None:
         image = Image.open(uploaded_file).convert("RGB")
         col_img, col_info = st.columns([1, 2])
-
+        
         with col_img:
             st.image(image, caption="上传的图片", use_column_width=True)
-
+        
         with col_info:
             st.markdown("**图片信息**")
             st.write(f"- 尺寸：{image.size[0]} × {image.size[1]} px")
             st.write(f"- 格式：{uploaded_file.type}")
-
+            
             analyze_vision_btn = st.button("🔍 开始识图分析", use_container_width=True, key="vision_btn")
-
+        
         if analyze_vision_btn:
             with st.spinner("🤖 视觉AI正在识别并分析图片，请稍候（约30秒）..."):
                 image_b64 = image_to_base64(image, max_size=512)
@@ -254,39 +239,155 @@ elif analysis_mode == "📷 上传图片识图":
 
 请详细、专业、具有教育意义。"""
                 result = analyze_image_with_vision(image_b64, prompt)
-
+            
             st.markdown("---")
             st.markdown(result)
             st.markdown("---")
             st.success("✅ 识图分析完成！")
 
-elif analysis_mode == "🎨 图片色彩分析":
-    st.markdown("## 🎨 图片色彩分析")
-    st.markdown("上传艺术作品图片，AI 将提取主色调并进行专业色彩分析。")
-
-    uploaded_file = st.file_uploader(
-        "选择一张艺术作品图片",
-        type=["jpg", "jpeg", "png", "webp"],
-        key="color_uploader"
-    )
-
+elif input_mode == "📝+📷 同时提供名称和图片":
+    st.markdown("提供作品名称和图片，AI 将结合两者进行更深入的分析。")
+    
+    col1, col2 = st.columns([1, 1])
+    
+    with col1:
+        artwork_name = st.text_input(
+            "作品名称（可选）",
+            placeholder="如：星空、蒙娜丽莎",
+            key="combined_name"
+        )
+    
+    with col2:
+        uploaded_file = st.file_uploader(
+            "上传作品图片",
+            type=["jpg", "jpeg", "png", "webp"],
+            key="combined_uploader"
+        )
+    
     if uploaded_file is not None:
         image = Image.open(uploaded_file).convert("RGB")
-        col_img, col_color = st.columns([1, 2])
+        st.image(image, caption="上传的图片", width=300)
+    
+    analyze_combined_btn = st.button("🎨 开始综合分析", use_container_width=True, key="combined_btn")
+    
+    if analyze_combined_btn:
+        if not artwork_name and uploaded_file is None:
+            st.error("⚠️ 请提供作品名称或上传图片（至少一项）")
+        else:
+            with st.spinner("🤖 AI 正在进行综合分析，请稍候..."):
+                if uploaded_file is not None:
+                    image_b64 = image_to_base64(image, max_size=512)
+                
+                if artwork_name and uploaded_file is not None:
+                    # 两者都有：结合分析
+                    prompt = f"""用户提供了作品名称：《{artwork_name}》。请结合这幅图片和作品名称进行详细分析。
 
-        with col_img:
-            st.image(image, caption="上传的图片", use_column_width=True)
+请按以下结构回复（用简体中文）：
 
-        with col_color:
-            num_colors = st.slider("提取主色数量", min_value=3, max_value=10, value=6)
+## 📋 作品信息
+- 作品名称：《{artwork_name}》
+- 确认艺术家和创作年代
+- 艺术流派
 
-            analyze_color_btn = st.button("🎨 开始色彩分析", use_container_width=True, key="color_btn")
+## 🔬 艺术分析
+1. 构图与空间处理
+2. 色彩运用与光影效果
+3. 技法与风格特点
+4. 象征意义与主题表达
+5. 历史背景与文化语境
 
-        if analyze_color_btn:
+## 💬 教学建议
+- 2-3个适合课堂讨论的问题
+- 延伸学习资源推荐
+
+请详细、专业、具有教育意义。"""
+                    try:
+                        from openai import OpenAI
+                        client = OpenAI(api_key=API_KEY, base_url=BASE_URL)
+                        
+                        messages = [
+                            {"role": "system", "content": "你是一位专业的艺术史学者和视觉艺术分析师。"},
+                            {"role": "user", "content": [
+                                {"type": "text", "text": prompt},
+                                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"}}
+                            ]}
+                        ]
+                        
+                        response = client.chat.completions.create(
+                            model=VISION_MODEL,
+                            messages=messages,
+                            max_tokens=2000,
+                            temperature=0.3,
+                        )
+                        result = response.choices[0].message.content
+                    except Exception as e:
+                        result = f"分析出错: {str(e)}"
+                elif artwork_name:
+                    # 只有文字
+                    result = analyze_text(artwork_name)
+                else:
+                    # 只有图片
+                    prompt = """请识别并分析这张艺术作品图片。
+
+请按以下结构回复（用简体中文）：
+
+## 📋 作品识别
+- 作品名称（如能识别）
+- 艺术家
+- 创作年代（如能判断）
+- 艺术流派
+
+## 🔬 艺术分析
+1. 构图与空间处理
+2. 色彩运用与光影效果
+3. 技法与风格特点
+4. 象征意义与主题表达
+5. 历史背景与文化语境
+
+## 💬 教学建议
+- 2-3个适合课堂讨论的问题
+- 延伸学习资源推荐
+
+请详细、专业、具有教育意义。"""
+                    result = analyze_image_with_vision(image_b64, prompt)
+            
+            st.markdown("---")
+            st.markdown(result)
+            st.markdown("---")
+            st.success("✅ 综合分析完成！")
+
+# ========== 侧边栏：高级功能 ==========
+with st.sidebar:
+    st.header("⚙️ 设置")
+    
+    # 模型信息
+    st.markdown("**分析模型**")
+    st.code(MODEL)
+    
+    st.markdown("**视觉模型**")
+    st.code(VISION_MODEL)
+    
+    st.markdown("---")
+    
+    # 高级功能：色彩分析
+    st.markdown("### 🎨 色彩分析")
+    st.markdown("上传图片进行专业的色彩分析")
+    
+    color_file = st.file_uploader(
+        "选择图片",
+        type=["jpg", "jpeg", "png", "webp"],
+        key="sidebar_color_uploader"
+    )
+    
+    if color_file is not None:
+        color_image = Image.open(color_file).convert("RGB")
+        num_colors = st.slider("提取主色数量", min_value=3, max_value=10, value=6)
+        
+        if st.button("🎨 开始色彩分析", key="sidebar_color_btn"):
             with st.spinner("🎨 正在提取色彩并分析..."):
                 # 提取主色调
-                palette, dominant = extract_colors(image, num_colors)
-
+                palette, dominant = extract_colors(color_image, num_colors)
+                
                 # 显示色彩面板
                 st.markdown("### 🎨 主色调提取")
                 color_html = "<div style='display:flex; gap:8px; flex-wrap:wrap; margin:10px 0;'>"
@@ -295,7 +396,7 @@ elif analysis_mode == "🎨 图片色彩分析":
                     color_html += f"<div style='width:60px;height:60px;background:{hex_c};border-radius:8px;border:1px solid #555;' title='{hex_c} RGB{rgb}'></div>"
                 color_html += "</div>"
                 st.markdown(color_html, unsafe_allow_html=True)
-
+                
                 # 主色信息表格
                 st.markdown("### 📊 色彩明细")
                 color_data = []
@@ -314,11 +415,11 @@ elif analysis_mode == "🎨 图片色彩分析":
                     "</table>",
                     unsafe_allow_html=True
                 )
-
+                
                 # AI 色彩分析
                 st.markdown("### 🤖 AI 色彩分析")
                 with st.spinner("🤖 AI 正在分析色彩运用..."):
-                    image_b64 = image_to_base64(image, max_size=512)
+                    image_b64 = image_to_base64(color_image, max_size=512)
                     prompt = f"""请对这张艺术作品的色彩运用进行专业分析。
 
 请从以下角度分析（用简体中文，详细且专业）：
@@ -336,7 +437,7 @@ elif analysis_mode == "🎨 图片色彩分析":
 请结合这些实际数据进行专业分析。
 """
                     ai_color_analysis = analyze_image_with_vision(image_b64, prompt)
-
+                
                 st.markdown(ai_color_analysis)
                 st.success("✅ 色彩分析完成！")
 
