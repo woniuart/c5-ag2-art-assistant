@@ -1,8 +1,10 @@
 streamlit>=1.30
 python-dotenv>=1.0
 openai>=1.0
+pillow>=10.0
 autogen-agentchat>=0.2
 pydantic>=2.0
 uvicorn>=0.25
 httpx>=0.25
 python-multipart>=0.0.6
+colorthief>=0.2.0
