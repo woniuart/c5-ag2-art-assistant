@@ -1,16 +1,14 @@
 services:
   - type: web
-    name: ag2-art-assistant
+    name: art-assistant
     env: python
-    plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: streamlit run streamlit_app.py --server.port $PORT --server.address 0.0.0.0 --server.headless true
+    startCommand: streamlit run streamlit_app.py --server.port $PORT --server.address 0.0.0.0
     envVars:
-      - key: PYTHON_VERSION
-        value: "3.11.0"
       - key: OPENROUTER_API_KEY
-        sync: false
+        value: sk-mdoklwrqimsbvjnruqrsdxmzoaycpekndmyvqgyymfqwooqa
       - key: OPENROUTER_BASE_URL
         value: https://api.siliconflow.cn/v1
       - key: AG2_DEFAULT_MODEL
-        value: MiniMaxAI/MiniMax-M2.5
+        value: Qwen/Qwen2-VL-72B-Instruct
+    plan: free
