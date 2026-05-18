@@ -28,7 +28,16 @@ st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 # 配置
 API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 BASE_URL = os.getenv("OPENROUTER_BASE_URL", "https://api.siliconflow.cn/v1")
-MODEL = os.getenv("AG2_DEFAULT_MODEL", "Qwen/Qwen2-VL-72B-Instruct")
+
+# 文本模型（用于文字分析）
+TEXT_MODEL = os.getenv("AG2_DEFAULT_MODEL", "Qwen/Qwen2.5-7B-Instruct")
+
+# 视觉模型（用于图片分析）- 必须是支持图像的VLM
+VISION_MODEL = os.getenv("VISION_MODEL", "Qwen/Qwen2-VL-7B-Instruct")
+
+# 如果视觉模型配置错误，给出提示
+if VISION_MODEL == TEXT_MODEL:
+    st.warning("⚠️ 视觉模型和文本模型相同，请确保 VISION_MODEL 设置为支持图像的模型（如 Qwen/Qwen2-VL-7B-Instruct）")
 
 # 标题
 st.markdown("""
@@ -88,7 +97,7 @@ with tab1:
                 client = OpenAI(api_key=API_KEY, base_url=BASE_URL)
                 
                 response = client.chat.completions.create(
-                    model=MODEL,
+                    model=TEXT_MODEL,
                     messages=[
                         {"role": "system", "content": """你是一位专业的艺术分析师，专门从事视觉艺术分析。
                         
@@ -148,7 +157,7 @@ with tab2:
                     
                     # 使用支持视觉的模型
                     response = client.chat.completions.create(
-                        model=MODEL,
+                        model=VISION_MODEL,
                         messages=[
                             {"role": "system", "content": """你是一位专业的艺术分析师，专门从事视觉艺术分析。
                             

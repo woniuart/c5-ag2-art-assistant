@@ -10,5 +10,7 @@ services:
       - key: OPENROUTER_BASE_URL
         value: https://api.siliconflow.cn/v1
       - key: AG2_DEFAULT_MODEL
-        value: Qwen/Qwen2-VL-72B-Instruct
+        value: Qwen/Qwen2.5-7B-Instruct
+      - key: VISION_MODEL
+        value: Qwen/Qwen2-VL-7B-Instruct
     plan: free
